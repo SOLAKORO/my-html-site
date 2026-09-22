@@ -3,32 +3,48 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 音声文字起こしアプリ</title>
+    <title>AI 音声文字起こしアプリ Pro</title>
     <style>
-        /* スタイルは前回と同じです */
         :root {
             --primary-color: #4CAF50;
             --danger-color: #f44336;
+            --info-color: #2196F3;
             --bg-color: #f4f7f6;
             --text-color: #333;
         }
-        body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
-        .container { width: 100%; max-width: 600px; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); box-sizing: border-box; }
-        h1 { text-align: center; font-size: 1.5rem; margin-bottom: 20px; }
-        .controls { display: flex; justify-content: center; gap: 15px; margin-bottom: 20px; }
-        button { padding: 12px 24px; font-size: 1rem; border: none; border-radius: 50px; cursor: pointer; font-weight: bold; }
-        #start-btn { background-color: var(--primary-color); color: white; }
-        #stop-btn { background-color: var(--danger-color); color: white; display: none; }
+        body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 100%; max-width: 700px; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); box-sizing: border-box; }
+        h1 { text-align: center; font-size: 1.4rem; margin-bottom: 10px; }
+        
+        .timer { text-align: center; font-size: 2rem; font-weight: bold; font-family: monospace; margin-bottom: 15px; color: #555; }
+        
+        .controls, .action-buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+        button { padding: 10px 20px; font-size: 0.95rem; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
+        button:active { opacity: 0.8; }
+        
+        #start-btn { background-color: var(--primary-color); color: white; border-radius: 50px; padding: 12px 30px; font-size: 1.1rem; }
+        #stop-btn { background-color: var(--danger-color); color: white; border-radius: 50px; padding: 12px 30px; font-size: 1.1rem; display: none; }
+        
+        .action-btn { background-color: var(--info-color); color: white; }
+        .clear-btn { background-color: #e0e0e0; color: #333; }
+        
         .status { text-align: center; margin-bottom: 15px; font-size: 0.9rem; color: #666; min-height: 1.5em; word-break: break-all; }
-        textarea { width: 100%; height: 250px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; line-height: 1.6; box-sizing: border-box; }
-        .clear-btn { margin-top: 10px; background-color: #e0e0e0; width: 100%; }
+        
+        textarea { width: 100%; height: 250px; padding: 15px; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; line-height: 1.6; box-sizing: border-box; margin-bottom: 10px; }
+        
+        /* 辞書設定エリア */
+        .dictionary-panel { margin-top: 20px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
+        .dictionary-panel h3 { margin-top: 0; font-size: 1rem; color: #444; }
+        .dictionary-panel p { font-size: 0.85rem; color: #666; margin-bottom: 10px; margin-top: 0; }
+        #dict-input { height: 120px; font-family: monospace; font-size: 0.9rem; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>🎙️ 音声文字起こしアプリ</h1>
+        <h1>🎙️ 音声文字起こしアプリ Pro</h1>
         
+        <div class="timer" id="timer">00:00</div>
         <div class="status" id="status">Safariで開き、マイクを許可してください</div>
         
         <div class="controls">
@@ -36,13 +52,27 @@
             <button id="stop-btn">録音停止</button>
         </div>
 
+        <div class="action-buttons">
+            <button id="copy-btn" class="action-btn">📋 全文コピー</button>
+            <button id="save-btn" class="action-btn">💾 テキスト保存</button>
+            <button id="clear-btn" class="clear-btn">🗑️ クリア</button>
+        </div>
+
         <textarea id="result-text" placeholder="ここに文字起こしされたテキストが表示されます..." readonly></textarea>
         
-        <button id="clear-btn" class="clear-btn">テキストをクリア</button>
+        <div class="dictionary-panel">
+            <h3>⚙️ 辞書登録（自動変換ルール）</h3>
+            <p>「変換前:変換後」の形式で1行ずつ入力してください。</p>
+            <textarea id="dict-input">かなた:奏風
+遊び:あそび
+友達:友だち
+体:身体
+様々:さまざま
+言葉:ことば</textarea>
+        </div>
     </div>
 
     <script>
-        // Web Speech APIの互換性チェック
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const statusText = document.getElementById('status');
         
@@ -50,25 +80,52 @@
             statusText.innerText = "このブラウザは非対応です。iPhoneの場合は必ず「Safari」を使用してください。";
         } else {
             const recognition = new SpeechRecognition();
-            
-            // iOS Safari向けの最適化
             recognition.lang = 'ja-JP';
             recognition.interimResults = true;
-            // iOSはcontinuousをtrueにすると動作が不安定になることがあるため、
-            // 途切れたら自動再開するような作りにするのが一般的ですが、まずは標準設定で試します。
             recognition.continuous = true; 
 
             const startBtn = document.getElementById('start-btn');
             const stopBtn = document.getElementById('stop-btn');
             const clearBtn = document.getElementById('clear-btn');
+            const copyBtn = document.getElementById('copy-btn');
+            const saveBtn = document.getElementById('save-btn');
             const resultTextArea = document.getElementById('result-text');
+            const timerDisplay = document.getElementById('timer');
+            const dictInput = document.getElementById('dict-input');
 
             let finalTranscript = ''; 
+            let timerInterval = null;
+            let secondsElapsed = 0;
+            let isRecording = false;
+
+            // タイマーフォーマット処理
+            function updateTimer() {
+                secondsElapsed++;
+                const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+                const secs = String(secondsElapsed % 60).padStart(2, '0');
+                timerDisplay.innerText = `${mins}:${secs}`;
+            }
+
+            // 辞書置換処理
+            function applyDictionary(text) {
+                const rules = dictInput.value.split('\n');
+                let processedText = text;
+                rules.forEach(rule => {
+                    const parts = rule.split(':');
+                    if (parts.length === 2 && parts[0].trim() !== '') {
+                        const target = parts[0].trim();
+                        const replacement = parts[1].trim();
+                        // グローバル置換
+                        const regex = new RegExp(target, 'g');
+                        processedText = processedText.replace(regex, replacement);
+                    }
+                });
+                return processedText;
+            }
 
             startBtn.addEventListener('click', () => {
                 try {
                     recognition.start();
-                    statusText.innerText = 'マイクの許可を待っています...';
                 } catch(e) {
                     statusText.innerText = `起動エラー: ${e.message}`;
                 }
@@ -79,20 +136,61 @@
             });
 
             clearBtn.addEventListener('click', () => {
-                finalTranscript = '';
-                resultTextArea.value = '';
+                if(confirm('テキストを全て消去しますか？')) {
+                    finalTranscript = '';
+                    resultTextArea.value = '';
+                    secondsElapsed = 0;
+                    timerDisplay.innerText = "00:00";
+                }
+            });
+
+            copyBtn.addEventListener('click', () => {
+                const text = resultTextArea.value;
+                if (!text) return;
+                navigator.clipboard.writeText(text).then(() => {
+                    const originalText = copyBtn.innerText;
+                    copyBtn.innerText = '✅ コピーしました';
+                    setTimeout(() => copyBtn.innerText = originalText, 2000);
+                }).catch(err => {
+                    alert('コピーに失敗しました。');
+                });
+            });
+
+            saveBtn.addEventListener('click', () => {
+                const text = resultTextArea.value;
+                if (!text) {
+                    alert('保存するテキストがありません。');
+                    return;
+                }
+                const blob = new Blob([text], { type: 'text/plain' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                // ファイル名に現在の日時を入れる
+                const now = new Date();
+                const filename = `文字起こし_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}.txt`;
+                
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
             });
 
             recognition.onstart = () => {
+                isRecording = true;
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'block';
                 statusText.innerText = '🎤 音声を聞き取っています...';
+                timerInterval = setInterval(updateTimer, 1000);
             };
 
             recognition.onend = () => {
+                isRecording = false;
                 startBtn.style.display = 'block';
                 stopBtn.style.display = 'none';
                 statusText.innerText = '停止しました（無音が続くと自動停止します）';
+                clearInterval(timerInterval);
             };
 
             recognition.onresult = (event) => {
@@ -100,9 +198,11 @@
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        finalTranscript += transcript + '。';
+                        // 確定したテキストに辞書ルールを適用
+                        finalTranscript += applyDictionary(transcript) + '。';
                     } else {
-                        interimTranscript = transcript;
+                        // 認識中のテキストにもリアルタイムで辞書ルールを適用
+                        interimTranscript = applyDictionary(transcript);
                     }
                 }
                 resultTextArea.value = finalTranscript + interimTranscript;
@@ -111,8 +211,6 @@
 
             recognition.onerror = (event) => {
                 console.error("エラー詳細:", event);
-                
-                // iOS特有のエラーメッセージを分かりやすく表示
                 if (event.error === 'not-allowed') {
                     statusText.innerText = "エラー: マイクへのアクセスが拒否されました。設定を確認してください。";
                 } else if (event.error === 'no-speech') {
@@ -120,7 +218,8 @@
                 } else {
                     statusText.innerText = `エラーが発生しました: ${event.error}`;
                 }
-                
+                isRecording = false;
+                clearInterval(timerInterval);
                 startBtn.style.display = 'block';
                 stopBtn.style.display = 'none';
             };
