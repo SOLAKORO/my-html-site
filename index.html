@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI そらごころ音声文字起こし Pro</title>
+    <title>AI 音声文字起こしアプリ Pro</title>
     <style>
         :root {
             --primary-color: #4CAF50;
             --danger-color: #f44336;
             --info-color: #2196F3;
+            --warning-color: #FF9800;
             --bg-color: #f4f7f6;
             --text-color: #333;
         }
@@ -25,8 +26,9 @@
         #start-btn { background-color: var(--primary-color); color: white; border-radius: 50px; padding: 12px 30px; font-size: 1.1rem; }
         #stop-btn { background-color: var(--danger-color); color: white; border-radius: 50px; padding: 12px 30px; font-size: 1.1rem; display: none; }
         
-        .action-btn { background-color: var(--info-color); color: white; }
-        .clear-btn { background-color: #e0e0e0; color: #333; }
+        .action-btn { background-color: var(--info-color); color: white; flex: 1; min-width: 140px; }
+        .save-btn { background-color: var(--warning-color); color: white; flex: 1; min-width: 140px; }
+        .clear-btn { background-color: #e0e0e0; color: #333; width: 100%; margin-top: 10px; }
         
         .status { text-align: center; margin-bottom: 15px; font-size: 0.9rem; color: #666; min-height: 1.5em; word-break: break-all; }
         
@@ -36,13 +38,24 @@
         .dictionary-panel { margin-top: 20px; background: #f9f9f9; padding: 15px; border-radius: 8px; border: 1px solid #ddd; }
         .dictionary-panel h3 { margin-top: 0; font-size: 1rem; color: #444; }
         .dictionary-panel p { font-size: 0.85rem; color: #666; margin-bottom: 10px; margin-top: 0; }
-        #dict-input { height: 120px; font-family: monospace; font-size: 0.9rem; }
+        #dict-input { height: 120px; width: 100%; font-family: monospace; font-size: 0.9rem; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+
+        /* 保存履歴エリア */
+        .history-panel { margin-top: 20px; background: #fff; padding: 15px; border-radius: 8px; border: 2px dashed #ccc; }
+        .history-panel h3 { margin-top: 0; font-size: 1.1rem; color: #333; margin-bottom: 15px; text-align: center; }
+        #history-list { display: flex; flex-direction: column; gap: 15px; }
+        .history-item { border: 1px solid #eee; border-radius: 8px; padding: 15px; background: #fdfdfd; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .hist-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .hist-date { font-size: 0.85rem; font-weight: bold; color: #555; }
+        .hist-del { background: var(--danger-color); color: white; padding: 5px 10px; font-size: 0.8rem; border: none; border-radius: 4px; cursor: pointer; }
+        .hist-text { font-size: 0.9rem; max-height: 80px; overflow-y: auto; background: #f1f1f1; padding: 10px; border-radius: 4px; margin-top: 10px; line-height: 1.4; }
+        audio { width: 100%; height: 40px; outline: none; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h1>🎙️ 音声文字起こしアプリ Pro</h1>
+        <h1>🎙️ そらごころ音声文字起こし Pro</h1>
         
         <div class="timer" id="timer">00:00</div>
         <div class="status" id="status">Safariで開き、マイクを許可してください</div>
@@ -54,31 +67,25 @@
 
         <div class="action-buttons">
             <button id="copy-btn" class="action-btn">📋 全文コピー</button>
-            <button id="save-btn" class="action-btn">💾 テキスト保存</button>
-            <button id="clear-btn" class="clear-btn">🗑️ クリア</button>
+            <button id="save-audio-btn" class="save-btn">💾 音声保存 (アプリ内)</button>
         </div>
+        <button id="clear-btn" class="clear-btn">🗑️ 現在のテキストと音声をクリア</button>
 
         <textarea id="result-text" placeholder="ここに文字起こしされたテキストが表示されます..." readonly></textarea>
         
+        <div class="history-panel">
+            <h3>📂 保存された音声とテキスト</h3>
+            <div id="history-list">
+                <!-- 保存された履歴がここに追加されます -->
+            </div>
+        </div>
+
         <div class="dictionary-panel">
             <h3>⚙️ 辞書登録（自動変換ルール）</h3>
             <p>「変換前:変換後」の形式で1行ずつ入力してください。</p>
             <textarea id="dict-input">
-あらきちはる:新垣ちはる
+あらかきちはる:新垣ちはる
 いなみねたいせい:稲嶺太惺
-うえはらかなた:上原奏風
-きんじょういろは:金城彩陽
-きんじょうひろと:金城陽斗
-しもざとりゅうせい:下里流生
-たなはらりょうと:棚原良斗
-たまきりくと:玉城楓仁
-ひとつばしあかり:一橋明香里
-ふくだひなた:福田陽太
-ふくはらさや:普久原沙耶
-ふくみねしんば:福嶺真翔
-まきやゆたか:眞喜屋由貴
-もろみざとうみと:諸見里海智
-もろみざとかなた:諸見里海湊
 遊び:あそび
 友達:友だち
 体:身体
@@ -88,74 +95,177 @@
     </div>
 
     <script>
+        // --- データベース（アプリ内保存）の準備 ---
+        const dbName = 'VoiceAppDB';
+        const storeName = 'records';
+        let db;
+
+        const initDB = () => {
+            const req = indexedDB.open(dbName, 1);
+            req.onupgradeneeded = e => {
+                db = e.target.result;
+                if (!db.objectStoreNames.contains(storeName)) {
+                    db.createObjectStore(storeName, { keyPath: 'id' });
+                }
+            };
+            req.onsuccess = e => {
+                db = e.target.result;
+                renderHistory();
+            };
+        };
+        initDB();
+
+        // --- 音声認識と録音の準備 ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const statusText = document.getElementById('status');
         
+        let recognition = null;
         if (!SpeechRecognition) {
             statusText.innerText = "このブラウザは非対応です。iPhoneの場合は必ず「Safari」を使用してください。";
         } else {
-            const recognition = new SpeechRecognition();
+            recognition = new SpeechRecognition();
             recognition.lang = 'ja-JP';
             recognition.interimResults = true;
             recognition.continuous = true; 
+        }
 
-            const startBtn = document.getElementById('start-btn');
-            const stopBtn = document.getElementById('stop-btn');
-            const clearBtn = document.getElementById('clear-btn');
-            const copyBtn = document.getElementById('copy-btn');
-            const saveBtn = document.getElementById('save-btn');
-            const resultTextArea = document.getElementById('result-text');
-            const timerDisplay = document.getElementById('timer');
-            const dictInput = document.getElementById('dict-input');
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const copyBtn = document.getElementById('copy-btn');
+        const saveAudioBtn = document.getElementById('save-audio-btn');
+        const resultTextArea = document.getElementById('result-text');
+        const timerDisplay = document.getElementById('timer');
+        const dictInput = document.getElementById('dict-input');
 
-            let finalTranscript = ''; 
-            let timerInterval = null;
-            let secondsElapsed = 0;
-            let isRecording = false;
+        let finalTranscript = ''; 
+        let timerInterval = null;
+        let secondsElapsed = 0;
+        let isRecording = false;
 
-            // タイマーフォーマット処理
-            function updateTimer() {
-                secondsElapsed++;
-                const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
-                const secs = String(secondsElapsed % 60).padStart(2, '0');
-                timerDisplay.innerText = `${mins}:${secs}`;
-            }
+        // 音声録音用変数
+        let mediaRecorder;
+        let audioChunks = [];
+        let currentAudioBlob = null;
+        let audioStream = null;
 
-            // 辞書置換処理
-            function applyDictionary(text) {
-                const rules = dictInput.value.split('\n');
-                let processedText = text;
-                rules.forEach(rule => {
-                    const parts = rule.split(':');
-                    if (parts.length === 2 && parts[0].trim() !== '') {
-                        const target = parts[0].trim();
-                        const replacement = parts[1].trim();
-                        // グローバル置換
-                        const regex = new RegExp(target, 'g');
-                        processedText = processedText.replace(regex, replacement);
-                    }
+        // タイマーフォーマット処理
+        function updateTimer() {
+            secondsElapsed++;
+            const mins = String(Math.floor(secondsElapsed / 60)).padStart(2, '0');
+            const secs = String(secondsElapsed % 60).padStart(2, '0');
+            timerDisplay.innerText = `${mins}:${secs}`;
+        }
+
+        // 辞書置換処理
+        function applyDictionary(text) {
+            const rules = dictInput.value.split('\n');
+            let processedText = text;
+            rules.forEach(rule => {
+                const parts = rule.split(':');
+                if (parts.length === 2 && parts[0].trim() !== '') {
+                    const target = parts[0].trim();
+                    const replacement = parts[1].trim();
+                    const regex = new RegExp(target, 'g');
+                    processedText = processedText.replace(regex, replacement);
+                }
+            });
+            return processedText;
+        }
+
+        // 履歴の描画
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+            if(!db) return;
+
+            const tx = db.transaction(storeName, 'readonly');
+            const req = tx.objectStore(storeName).getAll();
+            req.onsuccess = e => {
+                // 最新のものが上に来るように反転
+                const records = e.target.result.reverse();
+                
+                if(records.length === 0) {
+                    list.innerHTML = '<div style="text-align:center; color:#999; font-size:0.9rem;">保存されたデータはありません。</div>';
+                    return;
+                }
+
+                records.forEach(r => {
+                    const item = document.createElement('div');
+                    item.className = 'history-item';
+                    
+                    const audioUrl = URL.createObjectURL(r.audioBlob);
+                    
+                    item.innerHTML = `
+                        <div class="hist-header">
+                            <span class="hist-date">📅 ${r.date}</span>
+                            <button class="hist-del" onclick="deleteRecord(${r.id})">削除</button>
+                        </div>
+                        <audio controls src="${audioUrl}"></audio>
+                        <div class="hist-text">${r.text || '（テキストなし）'}</div>
+                    `;
+                    list.appendChild(item);
                 });
-                return processedText;
-            }
+            };
+        }
 
-            startBtn.addEventListener('click', () => {
+        // 履歴の削除（グローバル関数化）
+        window.deleteRecord = function(id) {
+            if(!confirm('この記録を完全に削除しますか？')) return;
+            const tx = db.transaction(storeName, 'readwrite');
+            tx.objectStore(storeName).delete(id);
+            tx.oncomplete = () => renderHistory();
+        };
+
+        if (recognition) {
+            startBtn.addEventListener('click', async () => {
                 try {
+                    // 1. 音声録音（MediaRecorder）の開始設定
+                    audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    audioChunks = [];
+                    
+                    // iOS向けにMIMEタイプを最適化
+                    let options = {};
+                    if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                        options = { mimeType: 'audio/mp4' };
+                    } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+                        options = { mimeType: 'audio/webm' };
+                    }
+                    
+                    mediaRecorder = new MediaRecorder(audioStream, options);
+                    mediaRecorder.ondataavailable = e => {
+                        if (e.data.size > 0) audioChunks.push(e.data);
+                    };
+                    mediaRecorder.onstop = () => {
+                        currentAudioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/mp4' });
+                        // マイクの使用を完全に停止
+                        audioStream.getTracks().forEach(track => track.stop());
+                    };
+                    mediaRecorder.start();
+
+                    // 2. 文字起こし（SpeechRecognition）の開始
                     recognition.start();
+
                 } catch(e) {
-                    statusText.innerText = `起動エラー: ${e.message}`;
+                    statusText.innerText = `マイクへのアクセスに失敗しました: ${e.message}`;
                 }
             });
 
             stopBtn.addEventListener('click', () => {
                 recognition.stop();
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
             });
 
             clearBtn.addEventListener('click', () => {
-                if(confirm('テキストを全て消去しますか？')) {
+                if(confirm('現在のテキストと音声データを消去しますか？（※保存済みの履歴は消えません）')) {
                     finalTranscript = '';
                     resultTextArea.value = '';
+                    currentAudioBlob = null;
                     secondsElapsed = 0;
                     timerDisplay.innerText = "00:00";
+                    statusText.innerText = "クリアしました";
                 }
             });
 
@@ -164,39 +274,48 @@
                 if (!text) return;
                 navigator.clipboard.writeText(text).then(() => {
                     const originalText = copyBtn.innerText;
-                    copyBtn.innerText = '✅ コピーしました';
+                    copyBtn.innerText = '✅ コピー完了';
                     setTimeout(() => copyBtn.innerText = originalText, 2000);
-                }).catch(err => {
+                }).catch(() => {
                     alert('コピーに失敗しました。');
                 });
             });
 
-            saveBtn.addEventListener('click', () => {
-                const text = resultTextArea.value;
-                if (!text) {
-                    alert('保存するテキストがありません。');
+            saveAudioBtn.addEventListener('click', () => {
+                if (isRecording) {
+                    alert('録音を停止してから保存してください。');
                     return;
                 }
-                const blob = new Blob([text], { type: 'text/plain' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                // ファイル名に現在の日時を入れる
+                if (!currentAudioBlob) {
+                    alert('保存する音声データがありません。録音を行ってください。');
+                    return;
+                }
+
+                // IndexedDBに保存
+                const id = Date.now();
                 const now = new Date();
-                const filename = `文字起こし_${now.getFullYear()}${(now.getMonth()+1).toString().padStart(2,'0')}${now.getDate().toString().padStart(2,'0')}_${now.getHours().toString().padStart(2,'0')}${now.getMinutes().toString().padStart(2,'0')}.txt`;
+                const dateString = `${now.getFullYear()}/${now.getMonth()+1}/${now.getDate()} ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
                 
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
+                const record = { 
+                    id: id, 
+                    audioBlob: currentAudioBlob, 
+                    text: resultTextArea.value, 
+                    date: dateString 
+                };
+
+                const tx = db.transaction(storeName, 'readwrite');
+                tx.objectStore(storeName).put(record);
+                tx.oncomplete = () => {
+                    alert('アプリ内に保存しました！画面下部の「保存された音声とテキスト」から確認できます。');
+                    renderHistory();
+                };
             });
 
             recognition.onstart = () => {
                 isRecording = true;
                 startBtn.style.display = 'none';
                 stopBtn.style.display = 'block';
-                statusText.innerText = '🎤 音声を聞き取っています...';
+                statusText.innerText = '🎤 録音・文字起こし中...';
                 timerInterval = setInterval(updateTimer, 1000);
             };
 
@@ -204,8 +323,13 @@
                 isRecording = false;
                 startBtn.style.display = 'block';
                 stopBtn.style.display = 'none';
-                statusText.innerText = '停止しました（無音が続くと自動停止します）';
+                statusText.innerText = '停止しました（保存する場合は「音声保存」を押してください）';
                 clearInterval(timerInterval);
+                
+                // 無音自動停止時なども確実に音声録音をストップさせる
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
             };
 
             recognition.onresult = (event) => {
@@ -213,10 +337,8 @@
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     const transcript = event.results[i][0].transcript;
                     if (event.results[i].isFinal) {
-                        // 確定したテキストに辞書ルールを適用
                         finalTranscript += applyDictionary(transcript) + '。';
                     } else {
-                        // 認識中のテキストにもリアルタイムで辞書ルールを適用
                         interimTranscript = applyDictionary(transcript);
                     }
                 }
@@ -227,16 +349,18 @@
             recognition.onerror = (event) => {
                 console.error("エラー詳細:", event);
                 if (event.error === 'not-allowed') {
-                    statusText.innerText = "エラー: マイクへのアクセスが拒否されました。設定を確認してください。";
+                    statusText.innerText = "エラー: マイクへのアクセスが拒否されました。";
                 } else if (event.error === 'no-speech') {
                     statusText.innerText = "エラー: 音声が検出されませんでした。";
-                } else {
-                    statusText.innerText = `エラーが発生しました: ${event.error}`;
                 }
                 isRecording = false;
                 clearInterval(timerInterval);
                 startBtn.style.display = 'block';
                 stopBtn.style.display = 'none';
+                
+                if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+                    mediaRecorder.stop();
+                }
             };
         }
     </script>
